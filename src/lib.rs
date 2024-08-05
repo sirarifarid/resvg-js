@@ -2,6 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -19,8 +21,9 @@ use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::Vector2F;
 use resvg::{
     tiny_skia::{PathSegment, Pixmap, Point},
-    usvg::{self, ImageKind, NodeKind, TreeParsing, TreeTextToPath},
+    usvg::{self, ImageKind, TreeParsing},
 };
+use resvg::usvg::Node;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::{
     prelude::{wasm_bindgen, JsValue},
@@ -32,7 +35,7 @@ mod fonts;
 mod options;
 
 use error::Error;
-use usvg::NodeExt;
+//use usvg::NodeExt;
 
 #[cfg(all(not(target_family = "wasm"), not(debug_assertions),))]
 #[cfg(not(all(target_os = "linux", target_arch = "arm")))]
@@ -160,7 +163,7 @@ impl Resvg {
             Either::B(b) => usvg::Tree::from_data(b.as_ref(), &opts),
         }
         .map_err(|e| napi::Error::from_reason(format!("{e}")))?;
-        tree.convert_text(&fontdb);
+        //tree.convert_text(&fontdb);
         Ok(Resvg { tree, js_options })
     }
 
@@ -191,8 +194,8 @@ impl Resvg {
             Vector2F::new(rect.right(), rect.bottom()),
         );
         let mut v = None;
-        for child in self.tree.root.children() {
-            let child_viewbox = match self.node_bbox(child).and_then(|v| v.intersection(rect)) {
+        for child in &self.tree.root.children {
+            let child_viewbox = match self.node_bbox(child.clone()).and_then(|v| v.intersection(rect)) {
                 Some(v) => v,
                 None => continue,
             };
@@ -221,7 +224,7 @@ impl Resvg {
     // Either<T, Undefined> depends on napi 2.4.3
     // https://github.com/napi-rs/napi-rs/releases/tag/napi@2.4.3
     pub fn get_bbox(&self) -> Either<BBox, Undefined> {
-        match self.tree.root.calculate_bbox() {
+        match self.tree.root.bounding_box {
             Some(bbox) => Either::A(BBox {
                 x: bbox.x() as f64,
                 y: bbox.y() as f64,
@@ -403,10 +406,10 @@ impl Resvg {
 }
 
 impl Resvg {
-    fn node_bbox(&self, node: usvg::Node) -> Option<RectF> {
-        let transform = node.borrow().transform();
-        let bbox = match &*node.borrow() {
-            usvg::NodeKind::Path(p) => {
+    fn node_bbox(&self, node: Node) -> Option<RectF> {
+        let transform = node.clone();
+        let bbox = match &node {
+            Node::Path(p) => {
                 let no_fill = p.fill.is_none()
                     || p.fill
                         .as_ref()
@@ -479,20 +482,22 @@ impl Resvg {
                 }
                 Some(outline.bounds())
             }
-            usvg::NodeKind::Group(g) => {
+            usvg::Node::Group(g) => {
+                let ff = <std::option::Option<Rc<RefCell<resvg::usvg::ClipPath>>> as Clone>::clone(&g.clip_path).unwrap();
+
                 let clippath = if let Some(clippath) =
-                    g.clip_path.as_ref().and_then(|n| n.root.first_child())
+                    g.clip_path.as_ref().and_then(|n| Option::from(n.borrow().root.children[0].clone()))
                 {
                     self.node_bbox(clippath)
-                } else if let Some(mask) = g.mask.as_ref().and_then(|n| n.root.first_child()) {
+                } else if let Some(mask) = g.mask.as_ref().and_then(|n| Option::from(n.borrow().root.children[0].clone())) {
                     self.node_bbox(mask)
                 } else {
                     Some(self.viewbox())
                 }?;
                 let mut v = None;
-                for child in node.children() {
+                for child in &g.children {
                     let child_viewbox =
-                        match self.node_bbox(child).and_then(|v| v.intersection(clippath)) {
+                        match self.node_bbox(child.clone()).and_then(|v| v.intersection(clippath)) {
                             Some(v) => v,
                             None => continue,
                         };
@@ -504,14 +509,14 @@ impl Resvg {
                 }
                 v.and_then(|v| v.intersection(self.viewbox()))
             }
-            usvg::NodeKind::Image(image) => {
+            usvg::Node::Image(image) => {
                 let rect = image.view_box.rect;
                 Some(points_to_rect(
                     Vector2F::new(rect.x(), rect.y()),
                     Vector2F::new(rect.right(), rect.bottom()),
                 ))
             }
-            usvg::NodeKind::Text(_) => None,
+            usvg::Node::Text(_) => None,
         }?;
         let mut pts = vec![
             Point::from_xy(bbox.min_x(), bbox.min_y()),
@@ -519,7 +524,7 @@ impl Resvg {
             Point::from_xy(bbox.min_x(), bbox.max_y()),
             Point::from_xy(bbox.max_x(), bbox.min_y()),
         ];
-        transform.map_points(&mut pts);
+        //transform.map_points(&mut pts);
         let x_min = pts[0].x.min(pts[1].x).min(pts[2].x).min(pts[3].x);
         let x_max = pts[0].x.max(pts[1].x).max(pts[2].x).max(pts[3].x);
         let y_min = pts[0].y.min(pts[1].y).min(pts[2].y).min(pts[3].y);
@@ -539,7 +544,7 @@ impl Resvg {
         let (width, height, transform) = self.js_options.fit_to.fit_to(self.tree.size)?;
         let mut pixmap = self.js_options.create_pixmap(width, height)?;
         // Render the tree
-        let _image = resvg::Tree::from_usvg(&self.tree).render(transform, &mut pixmap.as_mut());
+        let _image = resvg::render(&self.tree, transform, &mut pixmap.as_mut());
 
         // Crop the SVG
         let crop_rect = resvg::tiny_skia::IntRect::from_ltrb(
@@ -557,15 +562,7 @@ impl Resvg {
     }
 
     fn images_to_resolve_inner(&self) -> Result<Vec<String>, Error> {
-        let mut data = vec![];
-        for node in self.tree.root.descendants() {
-            if let NodeKind::Image(i) = &mut *node.borrow_mut() {
-                if let ImageKind::RAW(_, _, buffer) = &mut i.kind {
-                    let s = String::from_utf8(buffer.as_slice().to_vec())?;
-                    data.push(s);
-                }
-            }
-        }
+        let data = vec![];
         Ok(data)
     }
 
@@ -574,22 +571,6 @@ impl Resvg {
         let (options, _) = self.js_options.to_usvg_options();
         let mime = MimeType::parse(&buffer)?.mime_type().to_string();
 
-        for node in self.tree.root.descendants() {
-            if let NodeKind::Image(i) = &mut *node.borrow_mut() {
-                let matched = if let ImageKind::RAW(_, _, data) = &mut i.kind {
-                    let s = String::from_utf8(data.as_slice().to_vec()).map_err(Error::from)?;
-                    s == href
-                } else {
-                    false
-                };
-                if matched {
-                    let data = (resolver)(&mime, Arc::new(buffer.clone()), &options);
-                    if let Some(kind) = data {
-                        i.kind = kind;
-                    }
-                }
-            }
-        }
         Ok(())
     }
 }

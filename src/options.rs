@@ -366,12 +366,4 @@ where
 
 pub(crate) fn tweak_usvg_options(opts: &mut usvg::Options) {
     opts.image_href_resolver = ImageHrefResolver::default();
-    opts.image_href_resolver.resolve_string = Arc::new(move |data: &str, opts: &Options| {
-        if data.starts_with("https://") || data.starts_with("http://") {
-            Some(ImageKind::RAW(1, 1, Arc::new(data.as_bytes().to_vec())))
-        } else {
-            let resolver = ImageHrefResolver::default().resolve_string;
-            (resolver)(data, opts)
-        }
-    });
 }
