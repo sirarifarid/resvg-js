@@ -231,14 +231,9 @@ impl Resvg {
     /// Use a given `BBox` to crop the svg. Currently this method simply changes
     /// the viewbox/size of the svg and do not move the elements for simplicity
     pub fn crop_by_bbox(&mut self, bbox: &BBox) {
-        if !bbox.width.is_finite() || !bbox.height.is_finite() {
-            return;
-        }
-        let width = bbox.width as f32;
-        let height = bbox.height as f32;
-        //self.tree.view_box.rect =
-        //    usvg::NonZeroRect::from_xywh(bbox.x as f32, bbox.y as f32, width, height).unwrap();
-        //self.tree.size = usvg::Size::from_wh(width, height).unwrap();
+        // NOOP
+        // https://github.com/RazrFalcon/resvg/blob/master/CHANGELOG.md
+        // usvg::Tree::view_box. No longer needed.
     }
 
     #[napi]
@@ -550,15 +545,12 @@ impl Resvg {
     }
 
     fn images_to_resolve_inner(&self) -> Result<Vec<String>, Error> {
-        let data = vec![];
-        Ok(data)
+        // NOOP
+        Ok(vec![])
     }
 
     fn resolve_image_inner(&self, href: String, buffer: Vec<u8>) -> Result<(), Error> {
-        let resolver = usvg::ImageHrefResolver::default_data_resolver();
-        let (options, _) = self.js_options.to_usvg_options();
-        let mime = MimeType::parse(&buffer)?.mime_type().to_string();
-
+        // NOOP
         Ok(())
     }
 }

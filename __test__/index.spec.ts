@@ -9,6 +9,13 @@ import { Resvg, renderAsync } from '../index'
 
 import { jimpToRgbaPixels } from './helper'
 
+const fs1 = require('fs')
+const { resolve } = require('path')
+const { promisify } = require('util')
+
+const readdir = promisify(fs1.readdir)
+const stat = promisify(fs1.stat)
+
 test.skip('Use href to load a JPG image without alpha', async (t) => {
   const imgUrl = 'https://wd.imgix.net/image/kheDArv5csY6rvQUJDbWRscckLr1/De5peVXJZz3uSEmmVeYJ.png?w=500'
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
@@ -703,4 +710,37 @@ test('should throw (SVG string is empty)', (t) => {
 
   t.is(error.code, 'GenericFailure')
   t.is(error.message, 'SVG data parsing failed cause the document does not have a root node')
+})
+
+async function getFiles(dir) {
+  const subdirs = await readdir(dir)
+  const files = await Promise.all(
+    subdirs.map(async (subdir) => {
+      const res = resolve(dir, subdir)
+      return (await stat(res)).isDirectory() ? getFiles(res) : res
+    }),
+  )
+  return files.reduce((a, f) => (f.toString().endsWith('.ttf') ? a.concat(f) : a), [])
+}
+
+test('Emoji', async (t) => {
+  const filePath = '../example/emoji.svg'
+  const svg = await fs.readFile(join(__dirname, filePath))
+  const svgString = svg.toString('utf-8')
+  const fonts = await getFiles("fonts");
+  const resvg = new Resvg(svgString, {
+    font: {
+      fontFiles: fonts, // Load custom fonts.
+      loadSystemFonts: true, // It will be faster to disable loading system fonts.
+      //defaultFontFamily: 'Source Han Serif CN Light',
+    },
+  })
+  const pngData = resvg.render()
+  const pngBuffer = pngData.asPng()
+  await fs.writeFile('emoji.png', pngBuffer)
+  const result = await jimp.read(pngBuffer)
+
+  t.is(result.getWidth(), 500)
+  t.is(result.getHeight(), 200)
+  //t.is([""], fonts);
 })
