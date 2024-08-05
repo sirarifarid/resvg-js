@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::sync::Arc;
 use crate::error::Error;
 #[cfg(not(target_arch = "wasm32"))]
 use napi::{bindgen_prelude::Buffer, Either};
@@ -198,7 +199,7 @@ impl JsOptions {
             image_rendering: self.image_rendering,
             default_size: usvg::Size::from_wh(100.0, 100.0).unwrap(),
             image_href_resolver: usvg::ImageHrefResolver::default(),
-            fontdb: Default::default(),
+            fontdb: Arc::new(fontdb.clone()),
             font_resolver: FontResolver::default()
         };
         (opts, fontdb)

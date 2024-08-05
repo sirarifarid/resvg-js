@@ -481,11 +481,11 @@ impl Resvg {
             }
             usvg::Node::Group(g) => {
                 let clippath = if let Some(clippath) =
-                    g.clip_path().as_ref().and_then(|n| Option::from(n.root().children()[0].clone()))
+                    g.clip_path().as_ref().and_then(|n| n.root().children().first())
                 {
-                    self.node_bbox(clippath)
-                } else if let Some(mask) = g.mask().as_ref().and_then(|n| Option::from(n.root().children()[0].clone())) {
-                    self.node_bbox(mask)
+                    self.node_bbox(clippath.clone())
+                } else if let Some(mask) = g.mask().as_ref().and_then(|n| n.root().children().first()) {
+                    self.node_bbox(mask.clone())
                 } else {
                     Some(self.viewbox())
                 }?;
