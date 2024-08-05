@@ -7,7 +7,7 @@ use crate::error::Error;
 use napi::{bindgen_prelude::Buffer, Either};
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::fontdb::Database;
-use resvg::usvg::{self, fontdb, ImageHrefResolver};
+use resvg::usvg::{self, fontdb, FontResolver, ImageHrefResolver};
 use serde::{Deserialize, Deserializer};
 
 /// Image fit options.
@@ -67,27 +67,27 @@ enum LogLevelDef {
 }
 
 pub(crate) trait ResvgReadable {
-    fn load(&self, options: &usvg::Options, fontdb: &fontdb::Database) -> Result<usvg::Tree, usvg::Error>;
+    fn load(&self, options: &usvg::Options) -> Result<usvg::Tree, usvg::Error>;
 }
 
 impl<'a> ResvgReadable for &'a str {
-    fn load(&self, options: &usvg::Options, fontdb: &fontdb::Database) -> Result<usvg::Tree, usvg::Error> {
-        usvg::Tree::from_str(self, options, fontdb)
+    fn load(&self, options: &usvg::Options) -> Result<usvg::Tree, usvg::Error> {
+        usvg::Tree::from_str(self, options)
     }
 }
 
 impl<'a> ResvgReadable for &'a [u8] {
-    fn load(&self, options: &usvg::Options, fontdb: &fontdb::Database) -> Result<usvg::Tree, usvg::Error> {
-        usvg::Tree::from_data(self, options, fontdb)
+    fn load(&self, options: &usvg::Options) -> Result<usvg::Tree, usvg::Error> {
+        usvg::Tree::from_data(self, options)
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl<'a> ResvgReadable for &'a Either<String, Buffer> {
-    fn load(&self, options: &usvg::Options, fontdb: &fontdb::Database) -> Result<usvg::Tree, usvg::Error> {
+    fn load(&self, options: &usvg::Options) -> Result<usvg::Tree, usvg::Error> {
         match self {
-            Either::A(s) => s.as_str().load(options, fontdb),
-            Either::B(b) => b.as_ref().load(options, fontdb),
+            Either::A(s) => s.as_str().load(options),
+            Either::B(b) => b.as_ref().load(options),
         }
     }
 }
@@ -198,6 +198,8 @@ impl JsOptions {
             image_rendering: self.image_rendering,
             default_size: usvg::Size::from_wh(100.0, 100.0).unwrap(),
             image_href_resolver: usvg::ImageHrefResolver::default(),
+            fontdb: Default::default(),
+            font_resolver: FontResolver::default()
         };
         (opts, fontdb)
     }

@@ -2,9 +2,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 #[cfg(not(target_arch = "wasm32"))]
 use napi::bindgen_prelude::{
     AbortSignal, AsyncTask, Buffer, Either, Error as NapiError, Task, Undefined,
@@ -147,24 +144,26 @@ impl Resvg {
         svg: &Either<String, Buffer>,
         options: Option<String>,
     ) -> Result<Resvg, NapiError> {
-        let js_options: JsOptions = options
+        let js_options: JsOptions = options.clone()
+            .and_then(|o| serde_json::from_str(o.as_str()).ok())
+            .unwrap_or_default();
+        let js_options2: JsOptions = options
             .and_then(|o| serde_json::from_str(o.as_str()).ok())
             .unwrap_or_default();
         let _ = env_logger::builder()
             .filter_level(js_options.log_level)
             .try_init();
 
-        let (mut opts, fontdb) = js_options.to_usvg_options();
+        let (mut opts, _fontdb) = js_options.to_usvg_options();
         options::tweak_usvg_options(&mut opts);
         // Parse the SVG string into a tree.
-        let fontdb = fontdb::Database::new();
         let mut tree = match svg {
-            Either::A(a) => usvg::Tree::from_str(a.as_str(), &opts, &fontdb),
-            Either::B(b) => usvg::Tree::from_data(b.as_ref(), &opts, &fontdb),
+            Either::A(a) => usvg::Tree::from_str(a.as_str(), &opts),
+            Either::B(b) => usvg::Tree::from_data(b.as_ref(), &opts),
         }
         .map_err(|e| napi::Error::from_reason(format!("{e}")))?;
         //tree.convert_text(&fontdb);
-        Ok(Resvg { tree, js_options })
+        Ok(Resvg { tree, js_options: js_options2 })
     }
 
     #[napi]
@@ -188,7 +187,7 @@ impl Resvg {
     // Either<T, Undefined> depends on napi 2.4.3
     // https://github.com/napi-rs/napi-rs/releases/tag/napi@2.4.3
     pub fn inner_bbox(&self) -> Either<BBox, Undefined> {
-        let rect = self.tree.view_box().rect;
+        let rect = self.tree.root().bounding_box();
         let rect = points_to_rect(
             Vector2F::new(rect.x(), rect.y()),
             Vector2F::new(rect.right(), rect.bottom()),
@@ -225,12 +224,12 @@ impl Resvg {
     // https://github.com/napi-rs/napi-rs/releases/tag/napi@2.4.3
     pub fn get_bbox(&self) -> Either<BBox, Undefined> {
         let bbox = self.tree.root().bounding_box();
-        Either::A((BBox {
+        Either::A(BBox {
             x: bbox.x() as f64,
             y: bbox.y() as f64,
             width: bbox.width() as f64,
             height: bbox.height() as f64
-        }))
+        })
     }
 
     #[napi(js_name = cropByBBox)]
@@ -506,7 +505,7 @@ impl Resvg {
                 v.and_then(|v| v.intersection(self.viewbox()))
             }
             usvg::Node::Image(image) => {
-                let rect = image.view_box().rect;
+                let rect = image.bounding_box();
                 Some(points_to_rect(
                     Vector2F::new(rect.x(), rect.y()),
                     Vector2F::new(rect.right(), rect.bottom()),
