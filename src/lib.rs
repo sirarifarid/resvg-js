@@ -31,7 +31,6 @@ mod fonts;
 mod options;
 
 use error::Error;
-//use usvg::NodeExt;
 
 #[cfg(all(not(target_family = "wasm"), not(debug_assertions),))]
 #[cfg(not(all(target_os = "linux", target_arch = "arm")))]
@@ -147,14 +146,12 @@ impl Resvg {
         let js_options: JsOptions = options.clone()
             .and_then(|o| serde_json::from_str(o.as_str()).ok())
             .unwrap_or_default();
-        let js_options2: JsOptions = options
-            .and_then(|o| serde_json::from_str(o.as_str()).ok())
-            .unwrap_or_default();
         let _ = env_logger::builder()
-            .filter_level(js_options.log_level)
+            .filter_level(js_options.clone().log_level)
             .try_init();
 
-        let (mut opts, _fontdb) = js_options.to_usvg_options();
+        let binding = js_options.clone();
+        let (mut opts, _fontdb) = binding.to_usvg_options();
         options::tweak_usvg_options(&mut opts);
         // Parse the SVG string into a tree.
         let mut tree = match svg {
@@ -162,8 +159,7 @@ impl Resvg {
             Either::B(b) => usvg::Tree::from_data(b.as_ref(), &opts),
         }
         .map_err(|e| napi::Error::from_reason(format!("{e}")))?;
-        //tree.convert_text(&fontdb);
-        Ok(Resvg { tree, js_options: js_options2 })
+        Ok(Resvg { tree, js_options })
     }
 
     #[napi]
@@ -175,7 +171,6 @@ impl Resvg {
     #[napi]
     /// Output usvg-simplified SVG string
     pub fn to_string(&self) -> String {
-        //use usvg::TreeWriting;
         self.tree.to_string(&usvg::WriteOptions::default())
     }
 
@@ -223,7 +218,7 @@ impl Resvg {
     // Either<T, Undefined> depends on napi 2.4.3
     // https://github.com/napi-rs/napi-rs/releases/tag/napi@2.4.3
     pub fn get_bbox(&self) -> Either<BBox, Undefined> {
-        let bbox = self.tree.root().bounding_box();
+        let bbox = self.tree.root().abs_bounding_box();
         Either::A(BBox {
             x: bbox.x() as f64,
             y: bbox.y() as f64,
@@ -403,8 +398,7 @@ impl Resvg {
 }
 
 impl Resvg {
-    fn node_bbox(&self, node: Node) -> Option<RectF> {
-        let transform = node.clone();
+    fn node_bbox(&self, node: usvg::Node) -> Option<RectF> {
         let bbox = match &node {
             Node::Path(p) => {
                 let no_fill = p.fill().is_none()
@@ -519,7 +513,6 @@ impl Resvg {
             Point::from_xy(bbox.min_x(), bbox.max_y()),
             Point::from_xy(bbox.max_x(), bbox.min_y()),
         ];
-        //transform.map_points(&mut pts);
         let x_min = pts[0].x.min(pts[1].x).min(pts[2].x).min(pts[3].x);
         let x_max = pts[0].x.max(pts[1].x).max(pts[2].x).max(pts[3].x);
         let y_min = pts[0].y.min(pts[1].y).min(pts[2].y).min(pts[3].y);

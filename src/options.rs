@@ -13,7 +13,7 @@ use serde::{Deserialize, Deserializer};
 
 /// Image fit options.
 /// This provides the deserializer for `usvg::FitTo`.
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(
     tag = "mode",
     content = "value",
@@ -94,7 +94,7 @@ impl<'a> ResvgReadable for &'a Either<String, Buffer> {
 }
 
 /// The javascript options passed to `render()`.
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct JsOptions {
     /// Font related options.
@@ -225,7 +225,7 @@ impl JsOptions {
 }
 
 /// The font options passed to `load_fonts()`.
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct JsFontOptions {
     /// If system fonts should be loaded.
@@ -297,7 +297,7 @@ impl Default for JsFontOptions {
 }
 
 /// The font options passed to `load_fonts()`.
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Clone)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct JsCropOptions {
     /// The rectangle's left x-axis coordinate.

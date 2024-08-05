@@ -1,0 +1,16 @@
+<svg width="500" height="200" xmlns="http://www.w3.org/2000/svg">
+  <text
+    x="50%"
+    y="50%"
+    font-family="Apple Color Emoji"
+    font-size="48"
+    font-weight="bold"
+    fill="#FFFFFF"
+    text-anchor="middle"
+    dominant-baseline="middle"
+    stroke="black"
+    stroke-width="2"
+  >
+    👋🌍🗻한국말
+  </text>
+</svg>
