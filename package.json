@@ -47,6 +47,7 @@
     "access": "public"
   },
   "scripts": {
+    "prepare": "npm run build",
     "artifacts": "napi artifacts",
     "bench": "node -r @swc-node/register benchmark/bench.ts",
     "bundle": "run-p 'bundle:*'",
