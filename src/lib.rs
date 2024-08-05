@@ -4,7 +4,6 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
 use napi::bindgen_prelude::{
@@ -21,9 +20,9 @@ use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::Vector2F;
 use resvg::{
     tiny_skia::{PathSegment, Pixmap, Point},
-    usvg::{self, ImageKind},
+    usvg::{self},
 };
-use resvg::usvg::Node;
+use resvg::usvg::{fontdb, Node};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::{
     prelude::{wasm_bindgen, JsValue},
@@ -158,9 +157,10 @@ impl Resvg {
         let (mut opts, fontdb) = js_options.to_usvg_options();
         options::tweak_usvg_options(&mut opts);
         // Parse the SVG string into a tree.
+        let fontdb = fontdb::Database::new();
         let mut tree = match svg {
-            Either::A(a) => usvg::Tree::from_str(a.as_str(), &opts),
-            Either::B(b) => usvg::Tree::from_data(b.as_ref(), &opts),
+            Either::A(a) => usvg::Tree::from_str(a.as_str(), &opts, &fontdb),
+            Either::B(b) => usvg::Tree::from_data(b.as_ref(), &opts, &fontdb),
         }
         .map_err(|e| napi::Error::from_reason(format!("{e}")))?;
         //tree.convert_text(&fontdb);
@@ -177,7 +177,7 @@ impl Resvg {
     /// Output usvg-simplified SVG string
     pub fn to_string(&self) -> String {
         //use usvg::TreeWriting;
-        self.tree.to_string(&usvg::XmlOptions::default())
+        self.tree.to_string(&usvg::WriteOptions::default())
     }
 
     #[napi(js_name = innerBBox)]
@@ -188,13 +188,13 @@ impl Resvg {
     // Either<T, Undefined> depends on napi 2.4.3
     // https://github.com/napi-rs/napi-rs/releases/tag/napi@2.4.3
     pub fn inner_bbox(&self) -> Either<BBox, Undefined> {
-        let rect = self.tree.view_box.rect;
+        let rect = self.tree.view_box().rect;
         let rect = points_to_rect(
             Vector2F::new(rect.x(), rect.y()),
             Vector2F::new(rect.right(), rect.bottom()),
         );
         let mut v = None;
-        for child in &self.tree.root.children {
+        for child in self.tree.root().children().iter() {
             let child_viewbox = match self.node_bbox(child.clone()).and_then(|v| v.intersection(rect)) {
                 Some(v) => v,
                 None => continue,
@@ -224,15 +224,13 @@ impl Resvg {
     // Either<T, Undefined> depends on napi 2.4.3
     // https://github.com/napi-rs/napi-rs/releases/tag/napi@2.4.3
     pub fn get_bbox(&self) -> Either<BBox, Undefined> {
-        match self.tree.root.bounding_box {
-            Some(bbox) => Either::A(BBox {
-                x: bbox.x() as f64,
-                y: bbox.y() as f64,
-                width: bbox.width() as f64,
-                height: bbox.height() as f64,
-            }),
-            None => Either::B(()),
-        }
+        let bbox = self.tree.root().bounding_box();
+        Either::A((BBox {
+            x: bbox.x() as f64,
+            y: bbox.y() as f64,
+            width: bbox.width() as f64,
+            height: bbox.height() as f64
+        }))
     }
 
     #[napi(js_name = cropByBBox)]
@@ -244,9 +242,9 @@ impl Resvg {
         }
         let width = bbox.width as f32;
         let height = bbox.height as f32;
-        self.tree.view_box.rect =
-            usvg::NonZeroRect::from_xywh(bbox.x as f32, bbox.y as f32, width, height).unwrap();
-        self.tree.size = usvg::Size::from_wh(width, height).unwrap();
+        //self.tree.view_box.rect =
+        //    usvg::NonZeroRect::from_xywh(bbox.x as f32, bbox.y as f32, width, height).unwrap();
+        //self.tree.size = usvg::Size::from_wh(width, height).unwrap();
     }
 
     #[napi]
@@ -263,13 +261,13 @@ impl Resvg {
     /// Get the SVG width
     #[napi(getter)]
     pub fn width(&self) -> f32 {
-        self.tree.size.width().round()
+        self.tree.size().width().round()
     }
 
     /// Get the SVG height
     #[napi(getter)]
     pub fn height(&self) -> f32 {
-        self.tree.size.height().round()
+        self.tree.size().height().round()
     }
 }
 
@@ -410,22 +408,22 @@ impl Resvg {
         let transform = node.clone();
         let bbox = match &node {
             Node::Path(p) => {
-                let no_fill = p.fill.is_none()
-                    || p.fill
+                let no_fill = p.fill().is_none()
+                    || p.fill()
                         .as_ref()
-                        .map(|f| f.opacity.get() == 0.0)
+                        .map(|f| f.opacity().get() == 0.0)
                         .unwrap_or_default();
-                let no_stroke = p.stroke.is_none()
-                    || p.stroke
+                let no_stroke = p.stroke().is_none()
+                    || p.stroke()
                         .as_ref()
-                        .map(|f| f.opacity.get() == 0.0)
+                        .map(|f| f.opacity().get() == 0.0)
                         .unwrap_or_default();
                 if no_fill && no_stroke {
                     return None;
                 }
                 let mut outline = Outline::new();
                 let mut contour = Contour::new();
-                let mut iter = p.data.segments().peekable();
+                let mut iter = p.data().segments().peekable();
                 while let Some(seg) = iter.next() {
                     match seg {
                         PathSegment::MoveTo(p) => {
@@ -465,12 +463,12 @@ impl Resvg {
                 if !contour.is_empty() {
                     outline.push_contour(std::mem::replace(&mut contour, Contour::new()));
                 }
-                if let Some(stroke) = p.stroke.as_ref() {
+                if let Some(stroke) = p.stroke().as_ref() {
                     if !no_stroke {
                         let mut style = StrokeStyle::default();
-                        style.line_width = stroke.width.get() as f32;
+                        style.line_width = stroke.width().get() as f32;
                         style.line_join = LineJoin::Miter(style.line_width);
-                        style.line_cap = match stroke.linecap {
+                        style.line_cap = match stroke.linecap() {
                             usvg::LineCap::Butt => LineCap::Butt,
                             usvg::LineCap::Round => LineCap::Round,
                             usvg::LineCap::Square => LineCap::Square,
@@ -483,19 +481,17 @@ impl Resvg {
                 Some(outline.bounds())
             }
             usvg::Node::Group(g) => {
-                let ff = <std::option::Option<Rc<RefCell<resvg::usvg::ClipPath>>> as Clone>::clone(&g.clip_path).unwrap();
-
                 let clippath = if let Some(clippath) =
-                    g.clip_path.as_ref().and_then(|n| Option::from(n.borrow().root.children[0].clone()))
+                    g.clip_path().as_ref().and_then(|n| Option::from(n.root().children()[0].clone()))
                 {
                     self.node_bbox(clippath)
-                } else if let Some(mask) = g.mask.as_ref().and_then(|n| Option::from(n.borrow().root.children[0].clone())) {
+                } else if let Some(mask) = g.mask().as_ref().and_then(|n| Option::from(n.root().children()[0].clone())) {
                     self.node_bbox(mask)
                 } else {
                     Some(self.viewbox())
                 }?;
                 let mut v = None;
-                for child in &g.children {
+                for child in g.children().iter() {
                     let child_viewbox =
                         match self.node_bbox(child.clone()).and_then(|v| v.intersection(clippath)) {
                             Some(v) => v,
@@ -510,7 +506,7 @@ impl Resvg {
                 v.and_then(|v| v.intersection(self.viewbox()))
             }
             usvg::Node::Image(image) => {
-                let rect = image.view_box.rect;
+                let rect = image.view_box().rect;
                 Some(points_to_rect(
                     Vector2F::new(rect.x(), rect.y()),
                     Vector2F::new(rect.right(), rect.bottom()),
@@ -541,7 +537,7 @@ impl Resvg {
     }
 
     fn render_inner(&self) -> Result<RenderedImage, Error> {
-        let (width, height, transform) = self.js_options.fit_to.fit_to(self.tree.size)?;
+        let (width, height, transform) = self.js_options.fit_to.fit_to(self.tree.size())?;
         let mut pixmap = self.js_options.create_pixmap(width, height)?;
         // Render the tree
         let _image = resvg::render(&self.tree, transform, &mut pixmap.as_mut());

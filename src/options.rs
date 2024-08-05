@@ -2,14 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::sync::Arc;
-
 use crate::error::Error;
 #[cfg(not(target_arch = "wasm32"))]
 use napi::{bindgen_prelude::Buffer, Either};
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::fontdb::Database;
-use resvg::usvg::{self, ImageHrefResolver, ImageKind, Options};
+use resvg::usvg::{self, fontdb, ImageHrefResolver};
 use serde::{Deserialize, Deserializer};
 
 /// Image fit options.
@@ -69,27 +67,27 @@ enum LogLevelDef {
 }
 
 pub(crate) trait ResvgReadable {
-    fn load(&self, options: &usvg::Options) -> Result<usvg::Tree, usvg::Error>;
+    fn load(&self, options: &usvg::Options, fontdb: &fontdb::Database) -> Result<usvg::Tree, usvg::Error>;
 }
 
 impl<'a> ResvgReadable for &'a str {
-    fn load(&self, options: &usvg::Options) -> Result<usvg::Tree, usvg::Error> {
-        usvg::Tree::from_str(self, options)
+    fn load(&self, options: &usvg::Options, fontdb: &fontdb::Database) -> Result<usvg::Tree, usvg::Error> {
+        usvg::Tree::from_str(self, options, fontdb)
     }
 }
 
 impl<'a> ResvgReadable for &'a [u8] {
-    fn load(&self, options: &usvg::Options) -> Result<usvg::Tree, usvg::Error> {
-        usvg::Tree::from_data(self, options)
+    fn load(&self, options: &usvg::Options, fontdb: &fontdb::Database) -> Result<usvg::Tree, usvg::Error> {
+        usvg::Tree::from_data(self, options, fontdb)
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl<'a> ResvgReadable for &'a Either<String, Buffer> {
-    fn load(&self, options: &usvg::Options) -> Result<usvg::Tree, usvg::Error> {
+    fn load(&self, options: &usvg::Options, fontdb: &fontdb::Database) -> Result<usvg::Tree, usvg::Error> {
         match self {
-            Either::A(s) => s.as_str().load(options),
-            Either::B(b) => b.as_ref().load(options),
+            Either::A(s) => s.as_str().load(options, fontdb),
+            Either::B(b) => b.as_ref().load(options, fontdb),
         }
     }
 }
