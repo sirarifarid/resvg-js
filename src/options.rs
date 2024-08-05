@@ -9,7 +9,7 @@ use crate::error::Error;
 use napi::{bindgen_prelude::Buffer, Either};
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::fontdb::Database;
-use resvg::usvg::{self, ImageHrefResolver, ImageKind, Options, TreeParsing};
+use resvg::usvg::{self, ImageHrefResolver, ImageKind, Options};
 use serde::{Deserialize, Deserializer};
 
 /// Image fit options.

@@ -21,7 +21,7 @@ use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::Vector2F;
 use resvg::{
     tiny_skia::{PathSegment, Pixmap, Point},
-    usvg::{self, ImageKind, TreeParsing},
+    usvg::{self, ImageKind},
 };
 use resvg::usvg::Node;
 #[cfg(target_arch = "wasm32")]
@@ -176,7 +176,7 @@ impl Resvg {
     #[napi]
     /// Output usvg-simplified SVG string
     pub fn to_string(&self) -> String {
-        use usvg::TreeWriting;
+        //use usvg::TreeWriting;
         self.tree.to_string(&usvg::XmlOptions::default())
     }
 
