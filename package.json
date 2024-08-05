@@ -20,7 +20,8 @@
     "index.d.ts",
     "index.js",
     "js-binding.js",
-    "js-binding.d.ts"
+    "js-binding.d.ts",
+    "*.node"
   ],
   "napi": {
     "name": "resvgjs",
