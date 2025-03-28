@@ -15,7 +15,7 @@ use resvg::usvg::fontdb::{Family, Query, Source};
 use wasm_bindgen::JsCast;
 
 #[cfg(target_arch = "wasm32")]
-use woff2::decode::{convert_woff2_to_ttf, is_woff2};
+use woff2_patched::decode::{convert_woff2_to_ttf, is_woff2};
 
 /// Loads fonts.
 #[cfg(not(target_arch = "wasm32"))]
