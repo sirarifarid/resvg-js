@@ -21,7 +21,7 @@ pathfinder_geometry = "0.5.1"
 pathfinder_content = { version = "0.5.0", default-features = false }
 pathfinder_simd = { version = "=0.5.2", features = ["pf-no-simd"] }
 futures = "0.3.21"
-woff2 = "0.3.0"
+woff2-patched = "0.4.0"
 
 [target.'cfg(not(any(target_os = "linux", target_family = "wasm")))'.dependencies]
 mimalloc = "0.1"
@@ -55,6 +55,3 @@ opt-level = 3
 # Setting this to 1 may improve the performance of generated code, but may be slower to compile.
 # https://doc.rust-lang.org/rustc/codegen-options/index.html#codegen-units
 codegen-units = 1
-
-[patch.crates-io]
-woff2 = { git="https://github.com/yisibl/woff2-rs", branch="fix-total-compressed-size" }
